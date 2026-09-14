@@ -239,3 +239,24 @@ tbody tr:hover {
   background-color: var(--active-item-bg);
 }
 
+/* Enhanced Bold & High-Contrast Typography */
+.prose strong,
+strong,
+b {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.prose p,
+.prose li {
+  font-weight: 550;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+

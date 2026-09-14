@@ -24,6 +24,15 @@ export interface ChatMessage {
   isAudit?: boolean;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  target: string;
+  messages: ChatMessage[];
+}
+
 export interface AskResponse {
   filename: string;
   question: string;

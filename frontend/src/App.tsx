@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import type {
   DocFile,
   ChatMessage,
+  ChatSession,
   ApiKeyStatus
 } from './services/api';
 import {
@@ -15,8 +16,7 @@ import {
   fetchApiKeyStatus,
   uploadFiles,
   deleteFile,
-  askDocument,
-  runQCAudit
+  askDocument
 } from './services/api';
 
 function AppContent() {
@@ -27,7 +27,31 @@ function AppContent() {
   const [status, setStatus] = useState<ApiKeyStatus | null>(null);
 
   const [loading, setLoading] = useState<boolean>(false);
-  const [isAuditing, setIsAuditing] = useState<boolean>(false);
+
+  // Chat History & Sessions
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('docuagent_chat_sessions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+    try {
+      const savedId = localStorage.getItem('docuagent_active_session_id');
+      if (savedId) return savedId;
+      const savedSessions = localStorage.getItem('docuagent_chat_sessions');
+      if (savedSessions) {
+        const parsed = JSON.parse(savedSessions);
+        if (parsed && parsed.length > 0) return parsed[0].id;
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  });
 
   // Modals
   const [previewFile, setPreviewFile] = useState<DocFile | null>(null);
@@ -38,6 +62,19 @@ function AppContent() {
   useEffect(() => {
     loadFiles();
     loadStatus();
+  }, []);
+
+  // Restore active session messages and target on load
+  useEffect(() => {
+    if (activeSessionId && sessions.length > 0) {
+      const session = sessions.find((s) => s.id === activeSessionId);
+      if (session) {
+        setMessages(session.messages || []);
+        if (session.target) {
+          setActiveTarget(session.target);
+        }
+      }
+    }
   }, []);
 
   const loadFiles = async () => {
@@ -58,19 +95,114 @@ function AppContent() {
     }
   };
 
+  // Synchronize conversation messages into sessions & localStorage
+  const updateCurrentSessionMessages = (newMessages: ChatMessage[]) => {
+    setMessages(newMessages);
+
+    let currentId = activeSessionId;
+    if (!currentId) {
+      currentId = `session_${Date.now()}`;
+      setActiveSessionId(currentId);
+      localStorage.setItem('docuagent_active_session_id', currentId);
+    }
+
+    setSessions((prevSessions) => {
+      const firstUserMsg = newMessages.find((m) => m.role === 'user');
+      const titleCandidate = firstUserMsg
+        ? (firstUserMsg.content.slice(0, 32) + (firstUserMsg.content.length > 32 ? '...' : ''))
+        : (activeTarget === '__all__' ? 'All Documents Audit' : `Focus: ${activeTarget}`);
+
+      const existingIndex = prevSessions.findIndex((s) => s.id === currentId);
+      let updated: ChatSession[];
+
+      if (existingIndex >= 0) {
+        const existing = prevSessions[existingIndex];
+        const updatedSession: ChatSession = {
+          ...existing,
+          title: existing.title && existing.title !== 'New Conversation' ? existing.title : titleCandidate,
+          messages: newMessages,
+          target: activeTarget,
+          updatedAt: Date.now(),
+        };
+        updated = [
+          updatedSession,
+          ...prevSessions.filter((_, idx) => idx !== existingIndex),
+        ];
+      } else {
+        const newSession: ChatSession = {
+          id: currentId,
+          title: titleCandidate,
+          messages: newMessages,
+          target: activeTarget,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        updated = [newSession, ...prevSessions];
+      }
+
+      try {
+        localStorage.setItem('docuagent_chat_sessions', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Failed to save chat sessions to localStorage:', err);
+      }
+      return updated;
+    });
+  };
+
+  const handleNewChat = () => {
+    const newId = `session_${Date.now()}`;
+    setActiveSessionId(newId);
+    setMessages([]);
+    localStorage.setItem('docuagent_active_session_id', newId);
+  };
+
+  const handleSelectSession = (sessionId: string) => {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (session) {
+      setActiveSessionId(sessionId);
+      setMessages(session.messages || []);
+      if (session.target) {
+        setActiveTarget(session.target);
+      }
+      localStorage.setItem('docuagent_active_session_id', sessionId);
+    }
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    const remaining = sessions.filter((s) => s.id !== sessionId);
+    setSessions(remaining);
+    localStorage.setItem('docuagent_chat_sessions', JSON.stringify(remaining));
+
+    if (activeSessionId === sessionId) {
+      if (remaining.length > 0) {
+        handleSelectSession(remaining[0].id);
+      } else {
+        handleNewChat();
+      }
+    }
+  };
+
+  const handleClearHistory = () => {
+    if (!confirm('Are you sure you want to clear all chat history?')) return;
+    setSessions([]);
+    localStorage.removeItem('docuagent_chat_sessions');
+    handleNewChat();
+  };
+
   const handleUpload = async (fileList: FileList | File[]) => {
     try {
       setLoading(true);
       const res = await uploadFiles(fileList);
       await loadFiles();
-      setMessages((prev) => [
-        ...prev,
+      const updatedMessages = [
+        ...messages,
         {
-          role: 'assistant',
+          role: 'assistant' as const,
           content: `📥 **Uploaded ${res.count} file(s) successfully!**\nFiles added: ${res.uploaded.join(', ')}`,
           targetFile: 'Upload System',
         },
-      ]);
+      ];
+      updateCurrentSessionMessages(updatedMessages);
     } catch (err: any) {
       alert(`Upload failed: ${err.message}`);
     } finally {
@@ -93,7 +225,8 @@ function AppContent() {
 
   const handleSendMessage = async (question: string) => {
     const userMsg: ChatMessage = { role: 'user', content: question };
-    setMessages((prev) => [...prev, userMsg]);
+    const messagesWithUser = [...messages, userMsg];
+    updateCurrentSessionMessages(messagesWithUser);
     setLoading(true);
 
     try {
@@ -105,56 +238,15 @@ function AppContent() {
         content: res.answer,
         targetFile: res.filename,
       };
-      setMessages((prev) => [...prev, botMsg]);
+      updateCurrentSessionMessages([...messagesWithUser, botMsg]);
     } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `⚠️ Error processing request: ${err.message}`,
-          targetFile: activeTarget,
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRunAudit = async () => {
-    if (files.length === 0) {
-      alert('Please upload order documents before running a QC audit.');
-      return;
-    }
-
-    setIsAuditing(true);
-    setLoading(true);
-
-    const promptMsg: ChatMessage = {
-      role: 'user',
-      content: '⚡ Triggered 1-Click QC Audit across all workspace order documents.',
-    };
-    setMessages((prev) => [...prev, promptMsg]);
-
-    try {
-      const res = await runQCAudit();
-      const auditMsg: ChatMessage = {
+      const errorMsg: ChatMessage = {
         role: 'assistant',
-        content: res.report,
-        targetFile: `Full QC Audit (${res.documents_audited.length} files)`,
-        isAudit: true,
+        content: `⚠️ Error processing request: ${err.message}`,
+        targetFile: activeTarget,
       };
-      setMessages((prev) => [...prev, auditMsg]);
-    } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `⚠️ QC Audit failed: ${err.message}`,
-          targetFile: 'QC Engine',
-        },
-      ]);
+      updateCurrentSessionMessages([...messagesWithUser, errorMsg]);
     } finally {
-      setIsAuditing(false);
       setLoading(false);
     }
   };
@@ -168,10 +260,14 @@ function AppContent() {
         onUpload={handleUpload}
         onDeleteFile={handleDeleteFile}
         onPreviewFile={setPreviewFile}
-        onRunAudit={handleRunAudit}
-        isAuditing={isAuditing}
         status={status}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
+        onClearHistory={handleClearHistory}
       />
 
       <ChatArea
@@ -181,6 +277,7 @@ function AppContent() {
         onSendMessage={handleSendMessage}
         onOpenSandbox={() => setIsSandboxOpen(true)}
         loading={loading}
+        onUpload={handleUpload}
       />
 
       <ApiKeyModal
@@ -212,4 +309,3 @@ export function App() {
 }
 
 export default App;
-
