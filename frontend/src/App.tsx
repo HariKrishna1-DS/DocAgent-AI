@@ -4,7 +4,9 @@ import { ChatArea } from './components/ChatArea';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { CodeSandboxModal } from './components/CodeSandboxModal';
+import { DailyGameDrawer } from './components/DailyGameDrawer';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { getStreakData } from './services/gamePuzzles';
 import type {
   DocFile,
   ChatMessage,
@@ -53,10 +55,12 @@ function AppContent() {
     }
   });
 
-  // Modals
+  // Modals & Game Drawer
   const [previewFile, setPreviewFile] = useState<DocFile | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isSandboxOpen, setIsSandboxOpen] = useState<boolean>(false);
+  const [isGameOpen, setIsGameOpen] = useState<boolean>(false);
+  const [streakCount, setStreakCount] = useState<number>(() => getStreakData().streak);
 
   // Initial Load
   useEffect(() => {
@@ -278,6 +282,15 @@ function AppContent() {
         onOpenSandbox={() => setIsSandboxOpen(true)}
         loading={loading}
         onUpload={handleUpload}
+        onToggleGame={() => setIsGameOpen((prev) => !prev)}
+        isGameOpen={isGameOpen}
+        streakCount={streakCount}
+      />
+
+      <DailyGameDrawer
+        isOpen={isGameOpen}
+        onClose={() => setIsGameOpen(false)}
+        onStreakUpdated={(newStreak) => setStreakCount(newStreak)}
       />
 
       <ApiKeyModal

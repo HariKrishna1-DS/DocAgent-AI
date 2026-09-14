@@ -13,7 +13,8 @@ import {
   RefreshCw,
   Sun,
   Moon,
-  MessageSquare
+  MessageSquare,
+  Gamepad2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -28,6 +29,9 @@ interface ChatAreaProps {
   onOpenSandbox: () => void;
   loading: boolean;
   onUpload: (files: FileList | File[]) => void;
+  onToggleGame?: () => void;
+  isGameOpen?: boolean;
+  streakCount?: number;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -38,6 +42,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onOpenSandbox,
   loading,
   onUpload,
+  onToggleGame,
+  isGameOpen,
+  streakCount,
 }) => {
   const { isNight, toggleTheme } = useTheme();
   const [input, setInput] = useState<string>('');
@@ -144,6 +151,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <Terminal className="w-3.5 h-3.5" />
             <span>Python Sandbox</span>
           </button>
+
+          {onToggleGame && (
+            <button
+              onClick={onToggleGame}
+              title="Play Daily Word Puzzle"
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center space-x-1.5 border shadow-sm cursor-pointer ${
+                isGameOpen
+                  ? 'bg-amber-500/20 text-amber-500 border-amber-500/40 shadow-amber-500/10'
+                  : 'card-bg hover:bg-black/5 dark:hover:bg-white/10 border-theme-subtle text-theme-secondary hover:text-theme-primary'
+              }`}
+            >
+              <Gamepad2 className="w-3.5 h-3.5 text-amber-500" />
+              <span>Daily Game</span>
+              {(streakCount ?? 0) > 0 && (
+                <span className="text-[10px] bg-amber-500/20 text-amber-500 px-1.5 py-0.2 rounded-full font-black border border-amber-500/30">
+                  🔥 {streakCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </header>
 
