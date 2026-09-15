@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 from typing import List, Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -24,16 +25,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
-STATIC_DIR = "static"
+if getattr(sys, "frozen", False):
+    BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+REACT_DIST_DIR = os.path.join(BASE_DIR, "frontend", "dist")
+REACT_ASSETS_DIR = os.path.join(REACT_DIST_DIR, "assets")
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-REACT_DIST_DIR = os.path.join("frontend", "dist")
-REACT_ASSETS_DIR = os.path.join(REACT_DIST_DIR, "assets")
 if os.path.exists(REACT_ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=REACT_ASSETS_DIR), name="assets")
 
