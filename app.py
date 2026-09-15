@@ -105,6 +105,7 @@ class ApiKeyConfigRequest(BaseModel):
 
 class RunCodeRequest(BaseModel):
     code: str
+    inputs: Optional[str] = ""
 
 
 class ChatMessage(BaseModel):
@@ -195,7 +196,7 @@ async def run_code_endpoint(req: RunCodeRequest):
     """Safely executes Python code snippet and returns stdout."""
     if not req.code or not req.code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty.")
-    output = run_python_code(req.code)
+    output = run_python_code(req.code, input_data=req.inputs or "")
     return {"output": output}
 
 

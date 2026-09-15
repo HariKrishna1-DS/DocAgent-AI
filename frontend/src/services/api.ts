@@ -134,11 +134,11 @@ export async function runQCAudit(): Promise<QCAuditResponse> {
   return res.json();
 }
 
-export async function runCodeSnippet(code: string): Promise<RunCodeResponse> {
+export async function runCodeSnippet(code: string, inputs?: string): Promise<RunCodeResponse> {
   const res = await fetch('/run-code', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, inputs: inputs || '' }),
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: res.statusText }));

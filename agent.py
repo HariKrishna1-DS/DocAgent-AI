@@ -307,11 +307,12 @@ def calculate(expression: str) -> str:
         return f"Calculator error: {error}"
 
 
-def run_python_code(code: str) -> str:
-    """Executes Python code in an isolated environment and captures printed stdout and output."""
+def run_python_code(code: str, input_data: str = "") -> str:
+    """Executes Python code in an isolated environment and captures printed stdout, stderr, and interactive input()."""
     import sys
     import io
     import traceback
+    import builtins
 
     clean_code = code.strip()
     # Strip markdown code fences if provided
@@ -325,17 +326,47 @@ def run_python_code(code: str) -> str:
 
     old_stdout = sys.stdout
     old_stderr = sys.stderr
+    old_stdin = sys.stdin
     redirected_output = io.StringIO()
     redirected_error = io.StringIO()
     sys.stdout = redirected_output
     sys.stderr = redirected_error
 
+    # Handle standard input (stdin) lines
+    input_lines = (input_data or "").splitlines()
+    input_iter = iter(input_lines)
+    default_fallbacks = ["Python Learner", "42", "yes", "DocuAgent", "10", "apple", "25", "100"]
+    fallback_iter = iter(default_fallbacks)
+
+    def sandbox_input(prompt: str = "") -> str:
+        if prompt:
+            redirected_output.write(str(prompt))
+        try:
+            val = next(input_iter)
+            redirected_output.write(f"{val}\n")
+            return val
+        except StopIteration:
+            try:
+                fallback = next(fallback_iter)
+            except StopIteration:
+                fallback = "sample_input"
+            redirected_output.write(f"{fallback}  # [auto-provided input]\n")
+            return fallback
+
+    # Clone builtins and provide sandbox_input
+    sandbox_builtins = builtins.__dict__.copy()
+    sandbox_builtins["input"] = sandbox_input
+
     exec_globals = {
+        "__builtins__": sandbox_builtins,
         "math": __import__("math"),
         "datetime": __import__("datetime"),
         "json": __import__("json"),
         "re": __import__("re"),
         "os": __import__("os"),
+        "random": __import__("random"),
+        "collections": __import__("collections"),
+        "itertools": __import__("itertools"),
     }
 
     try:
@@ -351,6 +382,7 @@ def run_python_code(code: str) -> str:
     finally:
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        sys.stdin = old_stdin
 
 
 def read_pdf(file_path: str, start_page: int = 1, end_page: int = None) -> str:
